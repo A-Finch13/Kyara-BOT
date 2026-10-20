@@ -70,43 +70,17 @@ Chaque carte vérifiée est mémorisée dans `data/collections/<id du joueur>.js
    GUILD_ID=l'id de ton serveur Discord (facultatif : sans, les commandes sont globales et mettent jusqu'à 1 h à apparaître)
    ```
 
-### 2. Déploiement sur un serveur Debian 13
+### 2. Lancement
 
-Depuis ton PC Windows, à la racine du projet (il faut un accès SSH au serveur, avec un compte qui peut utiliser `sudo`) :
-
-```powershell
-.\deploy.cmd utilisateur@ip-du-serveur
-```
-
-ou un double-clic sur `deploy.cmd` (l'adresse est alors demandée). Le port SSH peut être ajouté en second argument (`deploy.cmd utilisateur@ip 2222`, 22 par défaut). Le serveur et le port sont retenus dans `deployserveur.txt` : les fois suivantes, un double-clic suffit. Le script est un simple fichier batch, sans PowerShell.
-
-Le script :
-1. vérifie `.env` puis envoie le code, les polices, `package.json`, `package-lock.json` et `.env` dans `~/kyara-bot` sur le serveur (sans `node_modules/` ni `data/`, qui est conservé d'un déploiement à l'autre) ;
-2. lance [deploy/install.sh](deploy/install.sh) avec `sudo` (le mot de passe peut être demandé), qui :
-   - installe Node.js 20 ou plus s'il manque (paquet Debian, sinon dépôt officiel NodeSource) ;
-   - installe les dépendances pour Linux (`npm ci`) et enregistre les commandes slash ;
-   - crée le service systemd `kyara-bot` : démarrage avec le serveur, redémarrage automatique en cas de plantage, arrêt propre, et le bot ne tourne pas en administrateur ;
-   - attend que le bot soit connecté à Discord et affiche ses premiers journaux.
-
-Pour une mise à jour, relance simplement `deploy.cmd`. Sur le serveur :
+Node.js 20 ou plus est requis.
 
 ```sh
-sudo journalctl -u kyara-bot -f      # journaux en direct
-sudo systemctl restart kyara-bot     # redémarrer
-sudo systemctl stop kyara-bot        # arrêter
+npm install        # installe les dépendances
+npm run deploy     # enregistre les commandes slash (1re fois et après chaque modification de commande)
+npm start          # lance le bot
 ```
 
-Installation sans Windows : copie le projet sur le serveur, puis `sudo bash deploy/install.sh` depuis son dossier.
-
-### Lancement local (Windows, pour tester)
-
-```sh
-npm install
-npm run deploy
-npm start
-```
-
-Ne lance pas le bot à deux endroits à la fois avec le même token. À l’arrêt (Ctrl+C, `systemctl restart`…), le bot termine d'écrire ses données avant de quitter.
+Ne lance pas le bot à deux endroits à la fois avec le même token. À l’arrêt (Ctrl+C…), le bot termine d'écrire ses données avant de quitter.
 
 Le dossier `data/` (comptes reconnus, favoris, ventes suivies, collections analysées, cache des images) est créé automatiquement au premier lancement. Garde-le ensuite : le supprimer fait repartir le bot de zéro.
 

@@ -134,6 +134,39 @@ export async function ownedCards(profile, cards, expected = null) {
   return owned;
 }
 
+// Quantité exacte possédée de chaque carte (pour les doublons) : Map<idCarte, { qty, since }> des cartes possédées.
+// Le profil public ne liste que 24 doublons (les plus rares) : ici on vérifie carte par carte.
+// Une quantité connue est réutilisée tant que le nombre de doublons du joueur n'a pas changé ; sinon elle est
+// revérifiée, au plus une fois toutes les 10 min (les doublons bougent à chaque booster).
+const QTY_REFRESH = 10 * 60_000;
+export async function cardQuantities(profile, cards) {
+  const { store, data } = await knowledge(profile);
+  const now = Date.now();
+  if (data._doublesCount !== profile.doublesCount && now - (data._qtyEpoch ?? 0) > QTY_REFRESH) {
+    data._doublesCount = profile.doublesCount;
+    data._qtyEpoch = now;
+  }
+  const epoch = data._qtyEpoch ?? 0;
+  const fresh = (v) => v === 0 || (Array.isArray(v) && (v[2] ?? 0) >= epoch); // 0 = absente (sûr tant que le compteur de rareté ne bouge pas)
+  const toCheck = cards.filter((c) => data[c.rarity] && !fresh(data[c.rarity].cards[c.id]));
+  for (let i = 0; i < toCheck.length; i += 60) {
+    const batch = toCheck.slice(i, i + 60);
+    const results = await Promise.all(batch.map((c) => kyara.userCard(profile.id, c.id).catch(() => null)));
+    batch.forEach((c, j) => {
+      if (!results[j]) return; // erreur réseau : on réessaiera la prochaine fois
+      const o = results[j].owned;
+      data[c.rarity].cards[c.id] = o ? [o.qty, o.since, now] : 0;
+    });
+  }
+  if (toCheck.length) await store.save();
+  const out = new Map();
+  for (const c of cards) {
+    const v = data[c.rarity]?.cards[c.id];
+    if (Array.isArray(v)) out.set(c.id, { qty: v[0], since: v[1] });
+  }
+  return out;
+}
+
 // Progression d'un joueur sur plusieurs œuvres : [{ name, cards, owned: Map }].
 export async function seriesProgress(profile, names) {
   // Correspondance sans majuscules ni accents : une série personnalisée est rattachée

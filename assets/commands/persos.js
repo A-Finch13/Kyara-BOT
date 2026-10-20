@@ -18,6 +18,7 @@ import {
 import { getFavoris } from '../favoris.js';
 import { cardEmbed } from '../fiche.js';
 import { ficheImage } from '../ficheImage.js';
+import { cardQuantities } from '../scan.js';
 import {
   baseEmbed,
   cardPages,
@@ -229,37 +230,89 @@ async function playerList(interaction, kind) {
   const title = isWish ? '💖 Envies' : '♻️ Doublons';
   if (!isVisible(u, kind)) return interaction.editReply(`🔒 **${u.pseudo}** a masqué ses ${isWish ? 'envies' : 'doublons'}.`);
 
-  const build = async ({ rarete: rarity, perso }) => {
+  // Œuvre choisie dans le menu (les valeurs des menus sont tronquées à 100 caractères).
+  const inSeries = (c, oeuvre) => !oeuvre || c.series.slice(0, 100) === oeuvre;
+
+  // Doublons complets d'une rareté ou d'une œuvre : le profil public n'en liste que 24 (les plus rares),
+  // alors on vérifie la quantité de chaque carte concernée (mémorisée ensuite, voir cardQuantities).
+  const canScan = !isWish && isVisible(u, 'collection');
+  const fullDoubles = async (rarity, oeuvre) => {
+    const seriesName = oeuvre ? (await resolveSeries(oeuvre))?.name : undefined;
+    if (oeuvre && !seriesName) return [];
+    const cards = await filterCatalog({ rarity: rarity ?? undefined, series: seriesName });
+    const qty = await cardQuantities(u, cards);
+    return cards.filter((c) => (qty.get(c.id)?.qty ?? 0) > 1).map((c) => ({ ...c, spare: qty.get(c.id).qty - 1 }));
+  };
+
+  const build = async ({ rarete: rarity, perso, oeuvre }) => {
     u = await getProfile(target.id, { fresh: true }); // données à jour à chaque reconstruction (la collection change vite)
     const total = isWish ? u.wishlistCount : u.doublesCount;
-    const shownAll = (u[kind]?.length ?? 0) >= (total ?? 0);
+    const full = canScan && Boolean(rarity || oeuvre);
+    const source = full ? await fullDoubles(rarity, oeuvre) : (u[kind] ?? []);
+    const shownAll = full || (u[kind]?.length ?? 0) >= (total ?? 0);
+    const filtre = [rarity && `${RARITIES[rarity].emoji} ${RARITIES[rarity].label}`, oeuvre].filter(Boolean).join(' · ');
+    const cards = source
+      .filter((c) => (!rarity || c.rarity === rarity) && inSeries(c, oeuvre) && matchesCharacter(c, perso))
+      .sort(byRarityThenRank);
+    const header = full
+      ? `**${fmt(cards.length)}** carte(s) en double pour ce filtre · **${fmt(cards.reduce((s, c) => s + c.spare, 0))}** exemplaire(s) en trop\n-# ${fmt(total ?? 0)} doublons au total · vérifié carte par carte`
+      : `**${fmt(total ?? 0)}** carte(s) au total` +
+        (shownAll
+          ? ''
+          : isWish
+            ? `\n-# Kyara n’affiche publiquement que les ${u[kind]?.length ?? 0} premières : la liste complète est sur le profil.`
+            : `\n-# Kyara n’affiche publiquement que les ${u[kind]?.length ?? 0} plus rares. Choisis une **rareté** ou une **œuvre** pour voir tous les doublons.`);
     return cardPages(
-      (u[kind] ?? []).filter((c) => (!rarity || c.rarity === rarity) && matchesCharacter(c, perso)).sort(byRarityThenRank),
+      cards,
       isWish ? 12 : 15, // envies : 12 par page, en grille 4 × 3
       () =>
         baseEmbed()
           .setAuthor({ name: u.pseudo, iconURL: u.avatar ?? undefined, url: profileUrl(u.id) })
-          .setTitle(`${title}${rarity ? ` — ${RARITIES[rarity].emoji} ${RARITIES[rarity].label}` : ''}`)
+          .setTitle(`${title}${filtre ? ` — ${filtre}` : ''}`)
           .setURL(profileUrl(u.id))
           .setFooter({ text: 'kyara.games' }),
       {
         line: (c) => cardLine(c, !isWish && c.spare > 1 ? ` ×${c.spare}` : ''),
         qty: (c) => (isWish ? 1 : (c.spare ?? 1)),
         cols: isWish ? 4 : 5,
-        header:
-          `**${fmt(total ?? 0)}** carte(s) au total` +
-          (shownAll ? '' : `\n-# Kyara n’affiche publiquement que les ${u[kind]?.length ?? 0} premières : la liste complète est sur le profil.`),
+        header,
         empty: perso
-          ? `Aucune carte correspondant à « ${perso} » parmi celles affichées.`
-          : rarity
-            ? 'Aucune carte de cette rareté parmi celles affichées.'
+          ? `Aucune carte correspondant à « ${perso} »${full ? '' : ' parmi celles affichées'}.`
+          : rarity || oeuvre
+            ? `Aucune carte pour ce filtre${full ? '' : ' parmi celles affichées'}.`
             : 'Aucune carte.',
       },
     );
   };
+
+  // Menu « Œuvre » : les œuvres présentes parmi les cartes visibles du joueur (les plus fournies d'abord),
+  // avec le bouton 🔎 pour chercher une œuvre par son titre.
+  const seriesMenu = (current) => {
+    const counts = new Map();
+    for (const c of u[kind] ?? []) counts.set(c.series, (counts.get(c.series) ?? 0) + 1);
+    const series = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'fr'));
+    return {
+      name: 'oeuvre',
+      placeholder: 'Œuvre',
+      searchable: true,
+      searchLabel: 'Rechercher une œuvre',
+      options: [
+        { label: 'Toutes les œuvres', value: null, emoji: '📚' },
+        ...series.map(([name, n]) => ({ label: name, value: name.slice(0, 100), emoji: '📖', description: `${n} carte${n > 1 ? 's' : ''}` })),
+        // L'œuvre choisie reste dans le menu même si elle n'y est plus (carte vendue entre-temps…).
+        ...(current && !series.some(([name]) => name.slice(0, 100) === current) ? [{ label: current, value: current, emoji: '📖' }] : []),
+      ],
+    };
+  };
+
   return sendView(interaction, {
     values: { rarete: interaction.options.getString('rarete') },
-    controls: [rarityControl, characterControl],
+    // Doublons : toutes les œuvres de Kyara (vérifiées carte par carte) ; envies : celles des 24 cartes visibles.
+    controls: async (values) => [
+      rarityControl,
+      canScan ? await seriesControl(values.oeuvre, await getFavoris(interaction.user.id)) : seriesMenu(values.oeuvre),
+      characterControl,
+    ], // recalculé à chaque affichage
     build,
     // Si le joueur a ouvert un booster, vendu ou acheté entre-temps, la réponse se met à jour au prochain clic.
     stale: async () => profileFingerprint(await getProfile(target.id, { fresh: true })) !== profileFingerprint(u),

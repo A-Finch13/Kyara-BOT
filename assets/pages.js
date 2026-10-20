@@ -309,9 +309,10 @@ export async function handlePageButton(interaction) {
   if (action === 'textclear') {
     await interaction.deferUpdate();
     s.values = { ...s.values, [name]: null };
-    Object.assign(s, asResult(await s.build(s.values)));
-    s.cache = new Map();
-    return interaction.editReply(await render(s, 0, token));
+    return withLoading(interaction, async () => {
+      await rebuild(s);
+      return render(s, 0, token);
+    });
   }
   // 🔎 : fenêtre de recherche par titre (à ouvrir tout de suite, sans deferUpdate avant).
   if (action === 'search') {
@@ -340,13 +341,37 @@ export async function handlePageButton(interaction) {
   }
   const target = Number(action);
   await interaction.deferUpdate(); // construire la page peut dépasser les 3 s permises
-  // Données changées depuis l'affichage (nouvelles cartes, ventes…) : on reconstruit avec les données à jour.
-  if (s.stale && (await s.stale().catch(() => false))) {
-    Object.assign(s, asResult(await s.build(s.values)));
-    s.cache = new Map();
+  return withLoading(interaction, async () => {
+    // Données changées depuis l'affichage (nouvelles cartes, ventes…) : on reconstruit avec les données à jour.
+    if (s.stale && (await s.stale().catch(() => false))) await rebuild(s);
+    return render(s, Math.max(0, Math.min(s.count - 1, target)), token);
+  });
+}
+
+// Mise à jour d'un message avec indicateur : si la reconstruction dure plus de 1,5 s (ex. première vérification
+// des doublons d'une grande rareté), un « ⏳ » s'affiche au-dessus du message pour montrer que le bot travaille.
+const LOADING = '⏳ Mise à jour en cours… La première vérification d’une grande rareté peut prendre jusqu’à une minute.';
+async function withLoading(interaction, work) {
+  let loading = null;
+  const timer = setTimeout(() => {
+    loading = Promise.resolve()
+      .then(() => interaction.editReply({ content: LOADING }))
+      .catch(() => {}); // l'indicateur ne doit jamais faire échouer la mise à jour
+  }, 1500);
+  let payload;
+  try {
+    payload = await work();
+  } finally {
+    clearTimeout(timer);
   }
-  const i = Math.max(0, Math.min(s.count - 1, target));
-  return interaction.editReply(await render(s, i, token));
+  if (loading) await loading; // le « ⏳ » ne doit pas arriver après le résultat
+  return interaction.editReply(payload);
+}
+
+// Reconstruit la réponse avec les valeurs actuelles (les pages déjà préparées sont oubliées).
+async function rebuild(s) {
+  Object.assign(s, asResult(await s.build(s.values)));
+  s.cache = new Map();
 }
 
 // Changement d'option dans un menu : on reconstruit la réponse et on revient à la première page.
@@ -371,9 +396,10 @@ export async function handlePageSelect(interaction) {
   s.values = { ...s.values, [name]: value === ALL ? null : value };
   s.menuPage = { ...s.menuPage, [name]: undefined };
   s.menuSearch = { ...s.menuSearch, [name]: undefined };
-  Object.assign(s, asResult(await s.build(s.values)));
-  s.cache = new Map();
-  return interaction.editReply(await render(s, 0, token));
+  return withLoading(interaction, async () => {
+    await rebuild(s);
+    return render(s, 0, token);
+  });
 }
 
 // Validation de la fenêtre de recherche : un seul résultat → il est choisi directement ;
@@ -389,9 +415,10 @@ export async function handlePageModal(interaction) {
   // Filtre texte (ex. personnage) : la réponse est reconstruite avec ce filtre, en page 1.
   if (kind === 'textq') {
     s.values = { ...s.values, [name]: query || null };
-    Object.assign(s, asResult(await s.build(s.values)));
-    s.cache = new Map();
-    return interaction.editReply(await render(s, 0, token));
+    return withLoading(interaction, async () => {
+      await rebuild(s);
+      return render(s, 0, token);
+    });
   }
   const control = (s.lastControls ?? (await resolveControls(s))).find((c) => c.name === name);
   const notice = (content) => interaction.followUp({ content, flags: MessageFlags.Ephemeral }).catch(() => {});
@@ -405,9 +432,10 @@ export async function handlePageModal(interaction) {
     s.values = { ...s.values, [name]: choice.value ?? null };
     s.menuSearch = { ...s.menuSearch, [name]: undefined };
     s.menuPage = { ...s.menuPage, [name]: undefined };
-    Object.assign(s, asResult(await s.build(s.values)));
-    s.cache = new Map();
-    return interaction.editReply(await render(s, 0, token));
+    return withLoading(interaction, async () => {
+      await rebuild(s);
+      return render(s, 0, token);
+    });
   }
   s.menuSearch = { ...s.menuSearch, [name]: query };
   s.menuPage = { ...s.menuPage, [name]: 0 };
@@ -471,6 +499,8 @@ export const rarityControl = {
 // puis les plus grandes œuvres de Kyara pour compléter (25 choix max, limite de Discord).
 // Comme dans /collection : toutes les œuvres de Kyara (l'œuvre choisie et tes favoris d'abord, puis les
 // autres par ordre alphabétique), avec « Précédentes / Suivantes » dans le menu et le bouton 🔎 de recherche.
+const cartes = (n) => `${n} carte${n > 1 ? 's' : ''}`;
+
 export async function seriesControl(current, favoris, { allLabel = 'Toutes les œuvres' } = {}) {
   const all = await listSeries();
   const size = new Map(all.map((s) => [s.name, s.cards.length]));
@@ -480,9 +510,9 @@ export async function seriesControl(current, favoris, { allLabel = 'Toutes les �
     emoji: favoris.includes(n) ? '⭐' : '📖',
     description: favoris.includes(n)
       ? size.has(n)
-        ? `Dans tes favoris · ${size.get(n)} cartes`
+        ? `Dans tes favoris · ${cartes(size.get(n))}`
         : 'Dans tes favoris · série personnalisée'
-      : `${size.get(n) ?? 0} cartes`,
+      : cartes(size.get(n) ?? 0),
   });
   const rest = all.map((s) => s.name).sort((a, b) => a.localeCompare(b, 'fr'));
   const names = [...new Set([current, ...favoris, ...rest].filter(Boolean))];

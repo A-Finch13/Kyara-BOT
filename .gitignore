@@ -1,0 +1,8 @@
+node_modules/
+.env
+data/
+graphify-out/
+.claude/
+CLAUDE.md
+deploy.cmd
+deploy/

@@ -29,3 +29,16 @@ export async function removeFavori(discordId, series) {
   await store.save();
   return true;
 }
+
+export async function forgetFavoris(discordId) {
+  const all = await store.load();
+  if (!all[discordId]) return false;
+  delete all[discordId];
+  await store.save();
+  return true;
+}
+
+// Membres qui ont des favoris (pour la durée de conservation).
+export async function favorisOwners() {
+  return Object.keys(await store.load());
+}

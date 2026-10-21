@@ -35,6 +35,12 @@ function playerStore(kyaraId) {
   return store;
 }
 
+// Efface tout ce qui est connu de la collection d'un joueur (suppression des données à sa demande).
+export async function forgetPlayer(kyaraId) {
+  await playerStore(kyaraId).remove();
+  stores.delete(kyaraId);
+}
+
 // Connaissances sur un joueur, par rareté :
 //   { [rareté]: { count, at, cards: { [idCarte]: 0 | 1 | [qty, since] } } }
 //   0 = absente, 1 = possédée (déduite des compteurs), [qty, since] = possédée (vérifiée).

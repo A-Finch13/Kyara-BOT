@@ -18,6 +18,7 @@ Bot Discord (discord.js v14) avec des commandes slash en français qui affichent
 | `/magasin [type] [membre] [pseudo]` | Les ventes, enchères et ordres d'achat en cours d'un joueur, carte par carte (façon Mudae) : nom, rareté, prix et illustration. Les annonces dont le compteur est écoulé ne sont plus affichées |
 | `/manquantes [oeuvre] [rarete] [membre] [pseudo]` | Les cartes qui manquent dans une œuvre (ou une rareté). Sans `oeuvre` ni `rarete` : toutes les œuvres favorites |
 | `/favoris ajouter oeuvre` · `retirer oeuvre` · `liste [membre]` | Gère tes œuvres favorites (15 max), avec ta progression. Une œuvre absente de Kyara peut être ajoutée : elle apparaît comme « série personnalisée », puis sa progression s'affiche toute seule quand elle arrive sur le site |
+| `/donnees voir` · `supprimer` | Ce que le bot a enregistré sur ton compte Discord (réponse visible par toi seul), ou sa suppression complète après confirmation. Le compte n'est ensuite plus relié automatiquement, jusqu'à ce que tu utilises `/profil` sur toi-même |
 
 Avec `pseudo`, le bot ne prend un joueur que si le pseudo correspond exactement (ou s'il n'y a qu'un résultat) ; sinon il propose les pseudos proches, sans jamais choisir un autre joueur au hasard. Le joueur visé est celui de l'option `pseudo` (n'importe quel joueur Kyara, ou un ID Discord / une mention), sinon le `membre` mentionné, sinon toi. Les longues réponses ont des boutons ◀ ▶, qui bouclent (◀ sur la première page mène à la dernière), utilisables par l'auteur de la commande pendant 30 min.
 
@@ -63,6 +64,16 @@ Le site est une application SvelteKit : ses pages chargent leurs données depuis
 - en cas de panne du site, la dernière réponse en cache est réutilisée.
 
 Ces routes ne sont pas une API officielle documentée : elles peuvent changer sans préavis. Le `robots.txt` du site exclut `/api/` des robots d'indexation. Si le bot doit tourner sur de gros serveurs, préviens l'équipe Kyara.
+
+### Données et confidentialité
+
+Voir [PRIVACY.md](PRIVACY.md). Les fichiers JSON de `data/` sont chiffrés en AES-256-GCM avec la clé `DATA_KEY` du fichier `.env` (64 caractères hexadécimaux). Pour en créer une :
+
+```
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Le bot refuse de démarrer sans cette clé, et chiffre au lancement les anciens fichiers encore en clair. **Garde-la précieusement** : sans elle, les données enregistrées sont illisibles. Ce qui est lié à un compte Discord (lien avec le compte Kyara, favoris, date de dernière commande) est effacé après 30 jours sans activité ([assets/donnees.js](assets/donnees.js)).
 
 ### Ajouter une commande
 

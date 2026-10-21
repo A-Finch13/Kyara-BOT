@@ -10,8 +10,12 @@ import { kyara, truncate } from './kyara.js';
 import { jsonStore } from './store.js';
 import { trackListings } from './ventes.js';
 
-const store = jsonStore('comptes'); // { [discordId]: { kyaraId, pseudo, at } | { none: true, at } }
-const RECHECK_MS = 3 * 24 * 60 * 60_000; // un membre sans compte trouvé est recherché à nouveau après 3 jours
+// { [discordId]: { kyaraId, pseudo, at } | { none: true, at } | { optOut: true, at } }
+// optOut : le membre a demandé la suppression de ses données (/donnees supprimer) et ne doit plus être relié
+// automatiquement ; il redevient reconnu s'il utilise lui-même une commande sur son propre compte.
+const store = jsonStore('comptes');
+const DAY_MS = 24 * 60 * 60_000;
+const RECHECK_MS = 3 * DAY_MS; // un membre sans compte trouvé est recherché à nouveau après 3 jours
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function discordIdFromAvatar(avatar) {
@@ -26,7 +30,9 @@ async function remember(players) {
     const discordId = discordIdFromAvatar(p?.avatar);
     if (!discordId) continue;
     const cur = all[discordId];
-    if (cur?.kyaraId === p.id && cur.pseudo === p.pseudo) continue;
+    if (cur?.optOut) continue;
+    // Déjà connu : on note seulement qu'il a été revu (au plus une fois par jour), pour la durée de conservation.
+    if (cur?.kyaraId === p.id && cur.pseudo === p.pseudo && Date.now() - cur.at < DAY_MS) continue;
     all[discordId] = { kyaraId: p.id, pseudo: p.pseudo, at: Date.now() };
     changed = true;
   }
@@ -141,10 +147,15 @@ async function searchFor(name, discordId, deep) {
 
 // Renvoie { kyaraId, pseudo } pour un membre Discord, ou null s'il n'a pas de compte Kyara détectable.
 // deep : recherche approfondie (plus de variantes de noms et tous les classements), ignore le cache négatif.
-export async function findAccount(user, member = null, { force = false, deep = false } = {}) {
+// consent : le membre cherche lui-même son compte, ce qui lève une demande de suppression passée.
+export async function findAccount(user, member = null, { force = false, deep = false, consent = false } = {}) {
   const all = await store.load();
   const cur = all[user.id];
   if (cur?.kyaraId) return cur;
+  if (cur?.optOut) {
+    if (!consent) return null;
+    delete all[user.id];
+  }
   if (cur?.none && !force && !deep && Date.now() - cur.at < RECHECK_MS) return null;
   const key = `${user.id}:${deep}`;
   if (pending.has(key)) return pending.get(key);
@@ -164,6 +175,36 @@ export async function findAccount(user, member = null, { force = false, deep = f
 export async function knownAccount(discordId) {
   const acc = (await store.load())[discordId];
   return acc?.kyaraId ? acc : null;
+}
+
+// Ce que le bot a enregistré sur ce compte Discord (pour /donnees voir), ou null.
+export async function accountRecord(discordId) {
+  return (await store.load())[discordId] ?? null;
+}
+
+// Supprime le lien de ce compte Discord et empêche de le recréer automatiquement.
+// Renvoie l'identifiant Kyara qui était relié, ou null.
+export async function forgetAccount(discordId) {
+  const all = await store.load();
+  const kyaraId = all[discordId]?.kyaraId ?? null;
+  all[discordId] = { optOut: true, at: Date.now() };
+  await store.save();
+  return kyaraId;
+}
+
+// Supprime les liens qui n'ont été ni revus ni utilisés depuis la durée de conservation.
+// lastActive(discordId) : date de la dernière commande de ce membre (0 si aucune).
+export async function purgeAccounts(maxAge, lastActive) {
+  const all = await store.load();
+  const limit = Date.now() - maxAge;
+  let removed = 0;
+  for (const [id, v] of Object.entries(all)) {
+    if (v.optOut || Math.max(v.at ?? 0, lastActive(id)) >= limit) continue;
+    delete all[id];
+    removed++;
+  }
+  if (removed) await store.save();
+  return removed;
 }
 
 // Ajoute les options communes "membre" et "pseudo" à une commande ou sous-commande.
@@ -211,10 +252,13 @@ export async function resolveTarget(interaction, { onSearch = null } = {}) {
   if (user.bot) return { error: '🤖 Les bots ne jouent pas à Kyara.' };
   const known = await knownAccount(user.id);
   if (known) return { id: known.kyaraId, discordId: user.id };
+  if (!self && (await accountRecord(user.id))?.optOut) {
+    return { error: `🔒 ${user} a demandé à ne pas être reconnu automatiquement : utilise plutôt l’option \`pseudo\` avec son pseudo Kyara.` };
+  }
 
   // Compte encore inconnu : recherche approfondie à partir de l'ID Discord.
   await onSearch?.(user, self);
-  const acc = await findAccount(user, member, { force: true, deep: true });
+  const acc = await findAccount(user, member, { force: true, deep: true, consent: self });
   if (acc) return { id: acc.kyaraId, discordId: user.id, found: true };
   return {
     error: self

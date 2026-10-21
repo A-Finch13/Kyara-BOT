@@ -83,3 +83,11 @@ export function startSalesTracker(client) {
   setInterval(() => round().catch(() => {}), TRACK_EVERY).unref?.();
   round().catch(() => {});
 }
+
+// Oublie les annonces suivies d'un vendeur (suppression des données à sa demande).
+export async function forgetSeller(kyaraId) {
+  const all = await store.load();
+  const ids = Object.keys(all).filter((id) => all[id].seller === kyaraId);
+  for (const id of ids) delete all[id];
+  if (ids.length) await store.save();
+}

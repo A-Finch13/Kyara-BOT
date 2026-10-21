@@ -54,36 +54,6 @@ Chaque carte vérifiée est mémorisée dans `data/collections/<id du joueur>.js
 - Chaque illustration est téléchargée une seule fois, puis gardée dans `data/cache/cartes/`.
 - Les polices sont celles du site : Zen Kaku Gothic New, Unbounded (pseudos et chiffres) et JetBrains Mono (libellés). Elles sont fournies dans [assets/fonts/](assets/fonts/) sous licence SIL OFL, pour un rendu identique sur n'importe quel hébergement.
 
-## Installation
-
-### 1. Application Discord
-
-1. Crée une application sur le [portail développeur Discord](https://discord.com/developers/applications). Dans l'onglet **Bot**, clique sur *Reset Token*, puis active **Server Members Intent** (requis pour `/classement`).
-2. Invite le bot avec ce lien, en remplaçant `TON_CLIENT_ID` par l'Application ID. Il donne les permissions Voir les salons, Envoyer des messages, Intégrer des liens et **Joindre des fichiers** (les images sont jointes aux messages) :
-   ```
-   https://discord.com/oauth2/authorize?client_id=TON_CLIENT_ID&scope=bot+applications.commands&permissions=52224
-   ```
-3. Crée un fichier `.env` à la racine du projet :
-   ```
-   DISCORD_TOKEN=le token du bot
-   CLIENT_ID=l'application id
-   GUILD_ID=l'id de ton serveur Discord (facultatif : sans, les commandes sont globales et mettent jusqu'à 1 h à apparaître)
-   ```
-
-### 2. Lancement
-
-Node.js 20 ou plus est requis.
-
-```sh
-npm install        # installe les dépendances
-npm run deploy     # enregistre les commandes slash (1re fois et après chaque modification de commande)
-npm start          # lance le bot
-```
-
-Ne lance pas le bot à deux endroits à la fois avec le même token. À l’arrêt (Ctrl+C…), le bot termine d'écrire ses données avant de quitter.
-
-Le dossier `data/` (comptes reconnus, favoris, ventes suivies, collections analysées, cache des images) est créé automatiquement au premier lancement. Garde-le ensuite : le supprimer fait repartir le bot de zéro.
-
 ## Fonctionnement
 
 Le site est une application SvelteKit : ses pages chargent leurs données depuis `https://kyara.games/api/...`. Le bot interroge ces mêmes routes publiques ([assets/kyara.js](assets/kyara.js)) :

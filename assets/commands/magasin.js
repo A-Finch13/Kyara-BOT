@@ -1,5 +1,5 @@
 import { SlashCommandBuilder } from 'discord.js';
-import { getProfile, isVisible, playerChoices, profileFingerprint, resolveTarget, targetOptions } from '../comptes.js';
+import { getProfile, isVisible, privateMessage, playerChoices, profileFingerprint, resolveTarget, targetOptions } from '../comptes.js';
 import { withLargeArt } from '../images.js';
 import { chakra, profileUrl, RARITIES, ts, wikiUrl } from '../kyara.js';
 import { baseEmbed, characterControl, matchesCharacter, sendView } from '../pages.js';
@@ -48,7 +48,7 @@ export async function execute(interaction) {
   if (target.error) return interaction.editReply(target.error);
 
   let u = await getProfile(target.id, { fresh: true });
-  if (!isVisible(u, 'market')) return interaction.editReply(`🔒 **${u.pseudo}** a masqué son activité sur le marché.`);
+  if (!isVisible(u, 'market')) return interaction.editReply(privateMessage(u, 'son activité sur le marché'));
   const author = { name: `Magasin de ${u.pseudo}`, iconURL: u.avatar ?? undefined, url: profileUrl(u.id) };
 
   const build = async ({ type, perso }) => {

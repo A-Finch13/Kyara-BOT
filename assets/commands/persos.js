@@ -1,6 +1,6 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { characterChoices, seriesChoices } from '../autocomplete.js';
-import { findAccount, getProfile, isVisible, playerChoices, profileFingerprint, resolveTarget, targetOptions } from '../comptes.js';
+import { findAccount, getProfile, isVisible, privateMessage, playerChoices, profileFingerprint, resolveTarget, targetOptions } from '../comptes.js';
 import {
   byRarityThenRank,
   cardLine,
@@ -228,7 +228,7 @@ async function playerList(interaction, kind) {
   let u = await getProfile(target.id, { fresh: true });
   const isWish = kind === 'wishlist';
   const title = isWish ? '💖 Envies' : '♻️ Doublons';
-  if (!isVisible(u, kind)) return interaction.editReply(`🔒 **${u.pseudo}** a masqué ses ${isWish ? 'envies' : 'doublons'}.`);
+  if (!isVisible(u, kind)) return interaction.editReply(privateMessage(u, isWish ? 'la liste de ses envies' : 'la liste de ses doublons'));
 
   // Œuvre choisie dans le menu (les valeurs des menus sont tronquées à 100 caractères).
   const inSeries = (c, oeuvre) => !oeuvre || c.series.slice(0, 100) === oeuvre;

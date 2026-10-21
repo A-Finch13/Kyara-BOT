@@ -1,5 +1,5 @@
 import { MessageFlags, SlashCommandBuilder } from 'discord.js';
-import { detectChannel, discordIdFromAvatar, getProfile, isVisible, playerChoices, resolveTarget, targetOptions } from '../comptes.js';
+import { detectChannel, discordIdFromAvatar, getProfile, isLocked, isVisible, privateMessage, playerChoices, resolveTarget, targetOptions } from '../comptes.js';
 import { kyara, profileUrl, RARITY_ORDER } from '../kyara.js';
 import { baseEmbed, sendPages } from '../pages.js';
 import { profileImage, rarityImage } from '../profilImage.js';
@@ -30,9 +30,15 @@ export async function execute(interaction) {
   });
   if (target.error) return interaction.editReply(target.error);
 
-  const u = await getProfile(target.id, { fresh: true });
+  let u = await getProfile(target.id, { fresh: true });
   // Le nombre d'œuvres complètes n'est donné que par le classement du site.
   const ladderRow = (await kyara.ladder('collection', u.pseudo, { fresh: true }).catch(() => null))?.found?.find((p) => p.id === u.id);
+  // Profil verrouillé : le site renvoie des zéros aux visiteurs, mais le classement public garde
+  // le nombre de cartes, de Mythiques et les points. On affiche ces valeurs-là, le reste est marqué privé.
+  const locked = isLocked(u);
+  if (locked && ladderRow) {
+    u = { ...u, owned: ladderRow.owned, mythics: ladderRow.mythics, rank: u.rank && { ...u.rank, points: ladderRow.points ?? u.rank.points } };
+  }
 
   const make = (title) =>
     baseEmbed()
@@ -45,18 +51,25 @@ export async function execute(interaction) {
   const page1 = {
     embed: make(`Profil de ${u.pseudo}`),
     bare: true, // image seule, affichée en grand
+    caption: locked ? '-# 🔒 Profil privé : seules les données publiques du classement Kyara sont affichées.' : null,
     image: () =>
       profileImage({
         u,
         completedSeries: ladderRow?.series ?? null,
         isSelf: (target.discordId ?? discordIdFromAvatar(u.avatar)) === interaction.user.id,
         showcase: isVisible(u, 'showcase') ? (u.best ?? []) : [],
-        hidden: { collection: !isVisible(u, 'collection'), doubles: !isVisible(u, 'doubles') },
+        hidden: {
+          // Profil verrouillé : le nombre de cartes reste public via le classement.
+          collection: locked ? !ladderRow : !isVisible(u, 'collection'),
+          doubles: !isVisible(u, 'doubles'),
+          boosters: !isVisible(u, 'stats'),
+          private: locked,
+        },
       }),
   };
 
   // Page 2 : la collection par rareté, en image aussi.
-  let page2 = make('Collection par rareté').setDescription('🔒 *Masqué par le joueur*');
+  let page2 = make('Collection par rareté').setDescription(privateMessage(u, 'le détail de sa collection'));
   if (isVisible(u, 'collection')) {
     const totals = Object.fromEntries(RARITY_ORDER.map((r) => [r, 0]));
     for (const c of await kyara.catalog()) totals[c.rarity]++;

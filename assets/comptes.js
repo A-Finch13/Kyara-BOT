@@ -226,7 +226,27 @@ export async function resolveTarget(interaction, { onSearch = null } = {}) {
   };
 }
 
-export const isVisible = (user, block) => !user.blocks?.find((b) => b.id === block)?.hidden;
+// Un joueur peut masquer une partie de son profil (blocks[].hidden) ou le verrouiller (locked) : le site
+// renvoie alors des zéros aux visiteurs non connectés, comme le bot. Verrous connus : « profile »,
+// « collection » et « trades » ; chacun cache les parties ci-dessous.
+const LOCKS = {
+  collection: ['profile', 'collection'],
+  series: ['profile', 'collection'],
+  showcase: ['profile', 'collection'],
+  wishlist: ['profile', 'collection'],
+  doubles: ['profile', 'collection', 'trades'],
+  market: ['profile', 'trades'],
+  stats: ['profile'], // boosters ouverts, bio…
+};
+export const isLocked = (user) => (user.locked ?? []).length > 0;
+export const isVisible = (user, block) =>
+  !user.blocks?.find((b) => b.id === block)?.hidden && !(LOCKS[block] ?? []).some((l) => user.locked?.includes(l));
+
+// Message à afficher quand une partie du profil n'est pas accessible.
+export const privateMessage = (user, what = 'sa collection') =>
+  isLocked(user)
+    ? `🔒 **${user.pseudo}** a rendu son profil privé : ${what} n’est visible que par ses amis sur Kyara.`
+    : `🔒 **${user.pseudo}** a masqué ${what}.`;
 
 // --- Détection des membres qui ont accès à un salon (pour /classement et /profil) ---
 

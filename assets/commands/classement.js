@@ -12,7 +12,7 @@ const CRITERIA = {
   mythics: { ...LADDERS.mythics, source: 'ladder' },
   series: { ...LADDERS.series, label: 'Collections finies', source: 'ladder' },
   achievements: { ...LADDERS.achievements, source: 'ladder' },
-  boosters: { label: 'Boosters ouverts', unit: 'boosters', source: 'profile', get: (u) => u.boostersOpened },
+  boosters: { label: 'Boosters ouverts', unit: 'boosters', source: 'profile', get: (u) => (isVisible(u, 'stats') ? u.boostersOpened : null) }, // profil privé : non classé
   doubles: { label: 'Doublons', unit: 'doublons', source: 'profile', get: (u) => (isVisible(u, 'doubles') ? u.doublesCount : null) },
   // Suivi par le bot (le site ne publie pas les ventes) : nombre de cartes vendues, puis chakra gagné.
   ventes: {

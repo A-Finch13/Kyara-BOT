@@ -1,6 +1,6 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { seriesChoices } from '../autocomplete.js';
-import { getProfile, isVisible, playerChoices, profileFingerprint, resolveTarget, targetOptions } from '../comptes.js';
+import { getProfile, isVisible, privateMessage, playerChoices, profileFingerprint, resolveTarget, targetOptions } from '../comptes.js';
 import { getFavoris } from '../favoris.js';
 import {
   bar,
@@ -39,7 +39,7 @@ export async function execute(interaction) {
   if (target.error) return interaction.editReply(target.error);
 
   let u = await getProfile(target.id, { fresh: true });
-  if (!isVisible(u, 'collection')) return interaction.editReply(`🔒 **${u.pseudo}** a masqué sa collection.`);
+  if (!isVisible(u, 'collection')) return interaction.editReply(privateMessage(u, 'sa collection'));
 
   const seriesInput = interaction.options.getString('oeuvre');
   const series = seriesInput ? await resolveSeries(seriesInput) : null;

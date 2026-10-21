@@ -215,7 +215,7 @@ function statsBox(ctx, x, y, w, stats, rank) {
   return h;
 }
 
-// p : { u, completedSeries, isSelf, showcase: [carte], hidden: { collection, doubles } }
+// p : { u, completedSeries, isSelf, showcase: [carte], hidden: { collection, doubles, boosters, private } }
 export async function profileImage({ u, completedSeries, isSelf, showcase, hidden }) {
   const avatarUrl = u.avatar?.replace(/\.webp/, '.png').replace(/size=\d+/, 'size=512');
   const [img, arts] = await Promise.all([avatar(avatarUrl), Promise.all(showcase.map((c) => cardArt(c)))]);
@@ -258,7 +258,7 @@ export async function profileImage({ u, completedSeries, isSelf, showcase, hidde
           label: 'Complétion',
           color: RED,
         },
-    { value: fr(u.boostersOpened), label: 'Boosters ouverts' },
+    { value: hidden.boosters ? '—' : fr(u.boostersOpened), label: 'Boosters ouverts' },
     { value: completedSeries === null || completedSeries === undefined ? '—' : fr(completedSeries), label: 'Œuvres complètes' },
     { value: hidden.doubles ? '—' : fr(u.doublesCount), label: 'Doublons' },
   ];
@@ -331,7 +331,10 @@ export async function profileImage({ u, completedSeries, isSelf, showcase, hidde
   ctx.fillStyle = MUTED;
   const since = `Membre depuis le ${new Date(u.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`;
   ctx.fillText(since, MID_X, y + 3);
-  if (isSelf) chip(ctx, MID_X + ctx.measureText(since).width + 12, y, 'c’est toi', { fill: RED, color: '#ffffff', font: MONO(12), h: 22 });
+  let chipX = MID_X + ctx.measureText(since).width + 12;
+  if (isSelf) chipX += chip(ctx, chipX, y, 'c’est toi', { fill: RED, color: '#ffffff', font: MONO(12), h: 22 }) + 8;
+  // Profil verrouillé : seules les données publiques du classement sont affichées.
+  if (hidden.private) chip(ctx, chipX, y, 'PROFIL PRIVÉ', { stroke: '#8d8899', color: '#cfcad6', font: MONO(12), h: 22 });
   y += 26;
   if (badgeRows.length) y += 16;
   const badgeColors = ['#3fbfa0', '#7b7bff', '#f5a524', '#ff6a8a'];
